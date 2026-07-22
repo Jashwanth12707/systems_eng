@@ -21,16 +21,16 @@ int main(int argc,char*argv[]){
         return 1;
     }
 
-    char buff[4096];
-    ssize_t buffsize=read(fd,buff,4096);
+    
+char buff[4096];
 
+ssize_t buffsize = read(src_fd, buff, sizeof(buff));
 
-    while (buffsize>0){
-        write(STDOUT_FILENO,buff,buffsize);
-        buffsize=read(fd,buff,sizeof(buff));
-    }
-
-    close(fd);
+while (buffsize > 0)
+{
+    write(dest_fd, buff, buffsize);
+    buffsize = read(src_fd, buff, sizeof(buff));
+}
 
     
     return 0;
