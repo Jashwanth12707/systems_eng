@@ -1,80 +1,21 @@
-# =====================================
 # Build directories
-# =====================================
 build/
 cmake-build-*/
 out/
 bin/
-dist/
 
-# =====================================
-# CMake
-# =====================================
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-compile_commands.json
-Makefile
-
-# =====================================
 # Object files
-# =====================================
 *.o
 *.obj
-*.lo
-*.slo
 
-# =====================================
-# Static/Dynamic libraries
-# =====================================
-*.a
-*.so
-*.so.*
-*.dll
-*.dylib
-*.lib
-
-# =====================================
 # Executables
-# =====================================
 *.exe
 *.out
 
-# Ignore executables generated in src/
-mycat
-mycp
-mytee
-mywc
-myhead
-mytail
-shell
-http_server
-chat_server
-
-# =====================================
-# Debugging
-# =====================================
-*.dSYM/
-*.stackdump
-core
-core.*
-
-# =====================================
-# Editors
-# =====================================
+# Editor
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# =====================================
-# OS files
-# =====================================
+# OS
 .DS_Store
 Thumbs.db
-
-# =====================================
-# Logs
-# =====================================
-*.log
