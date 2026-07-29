@@ -3,6 +3,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <cerrno>
+#include <cctype>
 
 using namespace std;
 
@@ -32,8 +33,8 @@ int main(int argc,char*argv[]){
         for(int i=0;i<buffsize;i++){
 
             char ch =buff[i];
-            
-            if (ch == ' ' || ch == '\n' || ch == '\t')
+
+            if (isspace(static_cast<unsigned char>(ch)))
             {
                 inword = false;
             }
