@@ -1,12 +1,18 @@
-#ifndef SHELL_HPP //this line check if the header file is already included//
+#ifndef SHELL_HPP
 #define SHELL_HPP
+
+#include <string>
+#include <vector>
+
+#include "parser.hpp"
+#include "executor.hpp"
+#include "builtins.hpp"
 
 class Shell
 {
 public:
     Shell();
-    void run(); //main function of our shell it will
-                //print,read commands,parse,execute,repeat forever//
+    void run();
 };
 
 #endif
