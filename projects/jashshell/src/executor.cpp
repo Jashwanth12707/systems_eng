@@ -8,11 +8,23 @@
 #include <string>
 #include <array>
 #include <fcntl.h>
+#include <signal.h>
+
+
+void handleSigchld(int)
+{
+    while (waitpid(-1, nullptr, WNOHANG) > 0)
+    {
+        // Keep reaping every finished child.
+    }
+}
 
 Executor::Executor()
 {
-
+signal(SIGCHLD, handleSigchld);
+signal(SIGINT, SIG_IGN); // Ignore SIGINT in the parent process
 }
+
 
 void Executor::execute(const Pipeline& pipeline)
 {
@@ -23,7 +35,7 @@ void Executor::execute(const Pipeline& pipeline)
 
     if (pipeline.commands.size() == 1)
     {
-        executeSimpleCommand(pipeline.commands[0]);
+        executeSimpleCommand(pipeline.commands[0], pipeline.background);
     }
     else
     {
@@ -31,7 +43,7 @@ void Executor::execute(const Pipeline& pipeline)
     }
 }
 
-void Executor::executeSimpleCommand(const Command& command)
+void Executor::executeSimpleCommand(const Command& command,bool background)
 {
     std::vector<const char*> argv;
 
@@ -52,15 +64,20 @@ void Executor::executeSimpleCommand(const Command& command)
         return;
     }
     else if (pid == 0)
-    {   applyRedirections(command);
+    {   // fork() inherited SIGINT=IGNORE from JashShell.
+        // Undo that for the command.
+        signal(SIGINT, SIG_DFL);
+        applyRedirections(command);
         execvp(argv[0], const_cast<char* const*>(argv.data()));
 
         perror("execvp");
         exit(EXIT_FAILURE);
     }
     else
-    {
-        waitpid(pid, nullptr, 0);
+    {   if(!background)
+        {
+            waitpid(pid, nullptr, 0);
+        }
     }
 }
 
@@ -160,7 +177,8 @@ void Executor::executePipeline(const Pipeline& pipeline)
         // CHILD PROCESS
         // -----------------------------------------------------
         if (pid == 0)
-        {
+        {   
+            signal(SIGINT, SIG_DFL);
             // -------------------------------------------------
             // CONNECT INPUT
             //
@@ -350,9 +368,12 @@ void Executor::executePipeline(const Pipeline& pipeline)
     // Waiting inside the fork loop would execute
     // commands one-by-one instead of concurrently.
     // ---------------------------------------------------------
-    for (pid_t pid : pids)
+    if(!pipeline.background)
     {
-        waitpid(pid, nullptr, 0);
+        for (pid_t pid : pids)
+        {
+            waitpid(pid, nullptr, 0);
+        }
     }
 }
     void Executor::applyRedirections(const Command& command)

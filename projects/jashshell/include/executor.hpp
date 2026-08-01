@@ -11,10 +11,11 @@ public:
 
     void execute(const Pipeline& pipeline);
 
+   
+
 private:
 
-    void executeSimpleCommand(const Command& command);
-
+    void executeSimpleCommand(const Command& command,bool background);
     void executePipeline(const Pipeline& pipeline);
     void applyRedirections(const Command& command);
 };
