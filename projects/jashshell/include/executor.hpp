@@ -16,6 +16,7 @@ private:
     void executeSimpleCommand(const Command& command);
 
     void executePipeline(const Pipeline& pipeline);
+    void applyRedirections(const Command& command);
 };
 
 #endif

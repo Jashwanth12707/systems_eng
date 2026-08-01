@@ -36,11 +36,29 @@ Pipeline Parser::parse(const std::string& input)
             continue;
         }
 
-        if (first)
+        else if (first)
         {
             command.program = word;
             first = false;
         }
+        else if(word == "<")
+        {
+            ss >> command.inputFile;
+        }
+        else if(word == ">")
+        {
+            ss >> command.outputFile;
+            command.append = false;
+        }
+        else if(word == ">>")
+        {
+            ss >> command.outputFile;
+            command.append = true;
+        }
+        else if(word == "&")
+        {
+            pipeline.background = true;
+        }  
         else
         {
             command.arguments.push_back(word);

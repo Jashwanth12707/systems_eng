@@ -2,7 +2,7 @@
 #define PARSER_HPP
 
 #include <string>
-#include <vector>
+#include "pipeline.hpp"
 
 
 class Parser
@@ -11,7 +11,7 @@ public:
     Parser();
 
     // Parses a command line into individual tokens.
-    std::vector<std::string> parse(const std::string& input);
+    Pipeline parse(const std::string& input);
 };
 
 #endif

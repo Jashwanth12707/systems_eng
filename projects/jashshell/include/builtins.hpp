@@ -1,15 +1,15 @@
 #ifndef BUILTINS_HPP
 #define BUILTINS_HPP
 
-#include <vector>
-#include <string>
+#include "pipeline.hpp"
+#include "command.hpp"
 
 class Builtins
 {
 public:
     Builtins();
 
-    bool execute(const std::vector<std::string>& tokens);
+    bool execute(Pipeline&pipeline);
 };
 
 #endif
