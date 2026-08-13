@@ -7,13 +7,17 @@
 
 #include <pthread.h>
 #include <unistd.h>
+#include <unordered_map>
+#include <cstdlib>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sstream>
 
 #include "http_request.h"
-
+int visitor_count=0;
+pthread_mutex_t counter_mutex = PTHREAD_MUTEX_INITIALIZER;
 class ThreadPool
 {
 private:
@@ -128,7 +132,111 @@ public:
         pthread_cond_destroy(&condition);
     }
 };
+std::string getRoute(const std::string& path)
+{
+    size_t pos = path.find('?');
 
+    if (pos == std::string::npos)
+    {
+        return path;
+    }
+
+    return path.substr(0, pos);
+}
+
+std::unordered_map<std::string, std::string>
+parseQuery(const std::string& path)
+{
+    std::unordered_map<std::string, std::string> params;
+
+    size_t pos = path.find('?');
+
+    if (pos == std::string::npos)
+    {
+        return params;
+    }
+
+    std::string query = path.substr(pos + 1);
+
+    std::stringstream ss(query);
+
+    std::string token;
+
+    while (std::getline(ss, token, '&'))
+    {
+        size_t equal = token.find('=');
+        if (equal == std::string::npos)
+        {
+            continue;
+        }
+
+        params[token.substr(0, equal)] =
+            token.substr(equal + 1);
+    }
+
+    return params;
+}
+
+std::string profileService(
+    std::unordered_map<std::string, std::string>& p)
+{
+    std::string name = p["name"];
+    std::string age = p["age"];
+    std::string sleep = p["sleep"];
+    std::string lang = p["lang"];
+
+    return
+        "=== DOSSIER ===\n"
+        "Name: " + name + 
+        "\nAge: " + age +
+        "\nSleep: " + sleep +
+        " hours\nLanguage: " + lang;
+}
+
+std::string judgeService(
+    std::unordered_map<std::string, std::string>& p)
+{
+    std::string name = p["name"];
+
+    int bugs = std::stoi(p["bugs"]);
+
+    if (bugs < 10)
+    {
+        return name +
+               ": acceptable chaos.";
+    }
+
+    if (bugs < 50)
+    {
+        return name +
+               ": repository requires emergency maintenance.";
+    }
+
+    return name +
+           ": catastrophic failure detected.";
+}
+
+long long fibonacci(int n)
+{
+    if (n <= 1)
+    {
+        return n;
+    }
+
+    return fibonacci(n - 1) +
+           fibonacci(n - 2);
+}
+
+std::string fibonacciService(
+    std::unordered_map<std::string, std::string>& p)
+{
+    int n = std::stoi(p["n"]);
+
+    return "Fib(" +
+           std::to_string(n) +
+           ") = " +
+           std::to_string(fibonacci(n));
+}
 
 // ----------------------------------------------------------
 // This function contains your old server logic.
@@ -140,8 +248,7 @@ public:
 
 void handleClient(
     int client_fd,
-    sockaddr_in client_address
-)
+    sockaddr_in client_address)
 {
     std::cout
         << "\nWorker "
@@ -159,8 +266,7 @@ void handleClient(
             client_fd,
             buffer,
             sizeof(buffer) - 1,
-            0
-        );
+            0);
 
     if (bytes_received <= 0)
     {
@@ -179,14 +285,20 @@ void handleClient(
         << request.path
         << std::endl;
 
+    std::string route =
+        getRoute(request.path);
+
+    auto params =
+        parseQuery(request.path);
+
     std::string body;
 
-    if (request.path == "/")
+    if (route == "/")
     {
         body = "Hello from JashServer!";
     }
 
-    else if (request.path == "/time")
+    else if (route == "/time")
     {
         auto now =
             std::chrono::system_clock::now();
@@ -197,17 +309,54 @@ void handleClient(
         body = std::ctime(&current_time);
     }
 
-    else if (request.path == "/sr71")
+    else if (route == "/sr71")
     {
         body =
-            "Aircraft: Lockheed SR-71 Blackbird\n"
-            "Top speed: Mach 3.3\n"
-            "Service ceiling: 85000 ft\n";
+            "Aircraft: SR-71 Blackbird\n"
+            "Speed: Mach 3.3\n"
+            "Ceiling: 85000 ft\n";
+    }
+
+    else if (route == "/counter")
+    {
+        pthread_mutex_lock(
+            &counter_mutex);
+
+        visitor_count++;
+
+        int count =
+            visitor_count;
+
+        pthread_mutex_unlock(
+            &counter_mutex);
+
+        body =
+            "Visitors: " +
+            std::to_string(count);
+    }
+
+    else if (route == "/profile")
+    {
+        body =
+            profileService(params);
+    }
+
+    else if (route == "/judge")
+    {
+        body =
+            judgeService(params);
+    }
+
+    else if (route == "/fib")
+    {
+        body =
+            fibonacciService(params);
     }
 
     else
     {
-        body = "404 Not Found";
+        body =
+            "404 Not Found";
     }
 
     std::string response =
@@ -222,13 +371,10 @@ void handleClient(
         client_fd,
         response.c_str(),
         response.length(),
-        0
-    );
+        0);
 
     close(client_fd);
 }
-
-
 // ----------------------------------------------------------
 // Main server.
 // ----------------------------------------------------------
