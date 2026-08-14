@@ -4,7 +4,8 @@
 #include <string>
 #include <chrono>
 #include <ctime>
-
+#include <fstream>
+#include <iterator>
 #include <pthread.h>
 #include <unistd.h>
 #include <unordered_map>
@@ -246,6 +247,82 @@ std::string fibonacciService(
 // it runs inside a worker thread.
 // ----------------------------------------------------------
 
+std::string homeService()
+{
+    return "Hello from JashServer!";
+}
+
+std::string timeService()
+{
+    auto now =
+        std::chrono::system_clock::now();
+
+    std::time_t current_time =
+        std::chrono::system_clock::to_time_t(now);
+
+    return std::ctime(&current_time);
+}
+
+std::string sr71Service()
+{
+    return
+        "Aircraft: Lockheed SR-71 Blackbird\n"
+        "Top speed: Mach 3.3\n"
+        "Service ceiling: 85000 ft\n";
+}
+
+std::string counterService()
+{
+    pthread_mutex_lock(&counter_mutex);
+
+    visitor_count++;
+
+    int current =
+        visitor_count;
+
+    pthread_mutex_unlock(&counter_mutex);
+
+    return
+        "Visitor count: "
+        + std::to_string(current);
+}
+
+std::unordered_map<std::string, std::function<std::string()>> routes={
+    
+    {"/", homeService},
+    {"/time", timeService},
+    {"/sr71", sr71Service},
+    {"/counter", counterService}
+};
+std::string readFile(const std::string& filename)
+    {
+    std::ifstream file(filename);
+    if(!file){
+        return "";
+    }
+    return std::string(
+        (std::istreambuf_iterator<char>(file)),
+        std::istreambuf_iterator<char>());
+    }   
+
+std::string getContentType(const std::string& path)
+{
+    if (path.size() >= 5 &&
+        path.substr(path.size() - 5) == ".html")
+    {
+        return "text/html";
+    }
+
+    if (path.size() >= 4 &&
+        path.substr(path.size() - 4) == ".css")
+    {
+        return "text/css";
+    }
+
+    return "text/plain";
+}
+
+
 void handleClient(
     int client_fd,
     sockaddr_in client_address)
@@ -290,90 +367,72 @@ void handleClient(
 
     auto params =
         parseQuery(request.path);
-
+    
     std::string body;
+std::string status = "HTTP/1.1 200 OK\r\n";
 
-    if (route == "/")
+if (route == "/profile")
+{
+    body = profileService(params);
+}
+else if (route == "/judge")
+{
+    body = judgeService(params);
+}
+else if (route == "/fibonacci")
+{
+    body = fibonacciService(params);
+}
+else
+{
+    std::string filename =
+        "public" + route;
+
+    body =
+        readFile(filename);
+
+    if (body.empty())
     {
-        body = "Hello from JashServer!";
+        auto it =
+            routes.find(route);
+
+        if (it != routes.end())
+        {
+            body =
+                it->second();
+        }
+        else
+        {
+            status =
+                "HTTP/1.1 404 Not Found\r\n";
+
+            body =
+                "404 Not Found";
+        }
     }
+}
 
-    else if (route == "/time")
-    {
-        auto now =
-            std::chrono::system_clock::now();
+std::string content_type =
+    getContentType(route);
 
-        std::time_t current_time =
-            std::chrono::system_clock::to_time_t(now);
+std::string response =
+    status +
+    "Content-Type: "
+    + content_type
+    + "\r\n"
+    + "Content-Length: "
+    + std::to_string(body.length())
+    + "\r\n\r\n"
+    + body;
 
-        body = std::ctime(&current_time);
-    }
-
-    else if (route == "/sr71")
-    {
-        body =
-            "Aircraft: SR-71 Blackbird\n"
-            "Speed: Mach 3.3\n"
-            "Ceiling: 85000 ft\n";
-    }
-
-    else if (route == "/counter")
-    {
-        pthread_mutex_lock(
-            &counter_mutex);
-
-        visitor_count++;
-
-        int count =
-            visitor_count;
-
-        pthread_mutex_unlock(
-            &counter_mutex);
-
-        body =
-            "Visitors: " +
-            std::to_string(count);
-    }
-
-    else if (route == "/profile")
-    {
-        body =
-            profileService(params);
-    }
-
-    else if (route == "/judge")
-    {
-        body =
-            judgeService(params);
-    }
-
-    else if (route == "/fib")
-    {
-        body =
-            fibonacciService(params);
-    }
-
-    else
-    {
-        body =
-            "404 Not Found";
-    }
-
-    std::string response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: "
-        + std::to_string(body.length())
-        + "\r\n\r\n"
-        + body;
-
-    send(
+        send(
         client_fd,
         response.c_str(),
         response.length(),
         0);
 
     close(client_fd);
+    
 }
 // ----------------------------------------------------------
 // Main server.
