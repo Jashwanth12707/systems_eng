@@ -219,7 +219,7 @@
         // =====================================================
 
         const engineSound =
-            new Audio("/sounds/su57howl.mp3");
+            new Audio("/sounds/afterburner.mp3");
 
         engineSound.loop = true;
         engineSound.volume = 0.35;
@@ -482,85 +482,6 @@
             speedStreaks
         );
 
-
-        // =====================================================
-        // ENGINE EXHAUST PARTICLES
-        // =====================================================
-
-        const EXHAUST_COUNT = 150;
-
-
-        const exhaustGeometry =
-            new THREE.BufferGeometry();
-
-
-        const exhaustPositions =
-            new Float32Array(
-                EXHAUST_COUNT * 3
-            );
-
-
-        for (
-            let i = 0;
-            i < EXHAUST_COUNT;
-            i++
-        ) {
-
-            const i3 =
-                i * 3;
-
-
-            exhaustPositions[i3] =
-                (Math.random() - 0.5)
-                * 2;
-
-
-            exhaustPositions[i3 + 1] =
-                (Math.random() - 0.5)
-                * 2;
-
-
-            exhaustPositions[i3 + 2] =
-                -Math.random() * 25;
-
-        }
-
-
-        exhaustGeometry.setAttribute(
-            "position",
-            new THREE.BufferAttribute(
-                exhaustPositions,
-                3
-            )
-        );
-
-
-        const exhaustMaterial =
-            new THREE.PointsMaterial({
-
-                size: 1.5,
-
-                transparent: true,
-
-                opacity: 0.0,
-
-                sizeAttenuation: true
-
-            });
-
-
-        const exhaustParticles =
-            new THREE.Points(
-                exhaustGeometry,
-                exhaustMaterial
-            );
-
-
-        scene.add(
-            exhaustParticles
-        );
-
-
         // =====================================================
         // FLIGHT SPEED
         // =====================================================
@@ -755,70 +676,6 @@
                     0.45,
                     flightSpeed * 0.1
                 );
-
-
-            // -------------------------------------------------
-            // ENGINE EXHAUST
-            // -------------------------------------------------
-
-            const exhaustData =
-                exhaustGeometry
-                    .attributes
-                    .position
-                    .array;
-
-
-            for (
-                let i = 0;
-                i < EXHAUST_COUNT;
-                i++
-            ) {
-
-                const i3 =
-                    i * 3;
-
-
-                exhaustData[i3 + 2] -=
-                    flightSpeed * 1.5;
-
-
-                if (
-                    exhaustData[i3 + 2] < -40
-                ) {
-
-                    exhaustData[i3] =
-                        (
-                            Math.random() - 0.5
-                        ) * 2;
-
-
-                    exhaustData[i3 + 1] =
-                        (
-                            Math.random() - 0.5
-                        ) * 2;
-
-
-                    exhaustData[i3 + 2] =
-                        -2;
-
-                }
-
-            }
-
-
-            exhaustGeometry
-                .attributes
-                .position
-                .needsUpdate = true;
-
-
-            // Exhaust visible only when engine runs
-
-            exhaustMaterial.opacity =
-                engineSound.paused
-                    ? 0.0
-                    : 0.65;
-
         }
 
 
@@ -944,13 +801,196 @@
 
         let aircraft = null;
 
+        // Afterburners live here so animate() can access them.
+        let leftAfterburner = null;
+        let rightAfterburner = null;
+
 
         const loader =
             new GLTFLoader();
 
 
         const MODEL_PATH =
-            "/models/sr71_blackbird.glb";
+            "/models/f22_raptor.glb";
+
+
+
+        // =====================================================
+        // AFTERBURNER CREATION
+        // =====================================================
+        function createAfterburner() {
+
+            const burner = new THREE.Group();
+
+            // =============================================
+            // OUTER AFTERBURNER PLUME
+            // =============================================
+
+            const outerGeometry = new THREE.ConeGeometry(
+                0.065,       // nozzle radius
+                0.38,        // flame length
+                24,
+                8,
+                true
+            );
+
+            const outerMaterial = new THREE.MeshBasicMaterial({
+                color: 0xff5a00,
+                transparent: true,
+                opacity: 0.70,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+
+            const outer = new THREE.Mesh(
+                outerGeometry,
+                outerMaterial
+            );
+
+            // Exhaust travels toward local +Z.
+            outer.rotation.x = Math.PI / 2;
+
+            // Move the CENTER of the cone backward so
+            // its BASE sits exactly at the burner origin.
+            outer.position.z = 0.19;
+
+            burner.add(outer);
+
+
+            // =============================================
+            // HOT CORE
+            // =============================================
+
+            const coreGeometry = new THREE.ConeGeometry(
+                0.030,
+                0.25,
+                20,
+                8,
+                true
+            );
+
+            const coreMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffdd,
+                transparent: true,
+                opacity: 0.95,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+
+            const core = new THREE.Mesh(
+                coreGeometry,
+                coreMaterial
+            );
+
+            core.rotation.x = Math.PI / 2;
+
+            core.position.z = 0.125;
+
+            burner.add(core);
+
+
+            // =============================================
+            // NOZZLE GLOW
+            // =============================================
+
+            const glowGeometry = new THREE.SphereGeometry(
+                0.055,
+                16,
+                16
+            );
+
+            const glowMaterial = new THREE.MeshBasicMaterial({
+                color: 0xff3300,
+                transparent: true,
+                opacity: 0.40,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const glow = new THREE.Mesh(
+                glowGeometry,
+                glowMaterial
+            );
+
+            // This stays exactly at the nozzle.
+            glow.position.set(0, 0, 0);
+
+            burner.add(glow);
+
+
+            burner.userData.outer = outer;
+            burner.userData.core = core;
+            burner.userData.glow = glow;
+            burner.userData.phase =
+                Math.random() * Math.PI * 2;
+
+            return burner;
+        }
+
+
+        // =====================================================
+        // AFTERBURNER ANIMATION
+        // =====================================================
+
+        function updateAfterburners(time) {
+            if (!leftAfterburner || !rightAfterburner) {
+                return;
+            }
+
+            const engineOn = !engineSound.paused;
+
+            for (const burner of [
+                leftAfterburner,
+                rightAfterburner
+            ]) {
+                const outer = burner.userData.outer;
+                const core = burner.userData.core;
+                const glow = burner.userData.glow;
+                const phase = burner.userData.phase;
+
+                if (!engineOn) {
+                    outer.visible = false;
+                    core.visible = false;
+                    glow.visible = false;
+                    continue;
+                }
+
+                outer.visible = true;
+                core.visible = true;
+                glow.visible = true;
+
+                // Small independent flicker so the two engines
+                // don't look like synchronized solid cones.
+                const flicker =
+                    1 +
+                    Math.sin(time * 0.025 + phase) * 0.10 +
+                    Math.sin(time * 0.061 + phase * 2.0) * 0.06;
+
+                const pulse =
+                    1 +
+                    Math.sin(time * 0.018 + phase) * 0.12;
+
+                outer.scale.set(
+                    flicker,
+                    flicker,
+                    flicker *
+                    (1 + Math.sin(time * 0.031 + phase) * 0.16)
+                );
+
+                core.scale.set(
+                    0.85 + flicker * 0.15,
+                    0.85 + flicker * 0.15,
+                    pulse
+                );
+
+                glow.scale.setScalar(
+                    0.9 +
+                    Math.sin(time * 0.04 + phase) * 0.12
+                );
+            }
+        }
 
 
         loader.load(
@@ -961,12 +1001,49 @@
 
                 aircraft =
                     gltf.scene;
+                // TEMPORARY: inspect aircraft dimensions
+                const aircraftBox = new THREE.Box3().setFromObject(aircraft);
 
+                const aircraftSize = new THREE.Vector3();
+                const aircraftCenter = new THREE.Vector3();
+
+                aircraftBox.getSize(aircraftSize);
+                aircraftBox.getCenter(aircraftCenter);
+
+                console.log("AIRCRAFT SIZE:", aircraftSize);
+                console.log("AIRCRAFT CENTER:", aircraftCenter);
+                console.log("AIRCRAFT POSITION:", aircraft.position);
 
                 scene.add(
                     aircraft
                 );
+                // =================================================
+                // AFTERBURNERS
+                // =================================================
+                //
+                // +Z = nose, -Z = tail on this F-22 model.
+                // These are CHILDREN of aircraft, so they rotate
+                // with the aircraft for roll, pitch and yaw.
+                // =================================================
 
+                leftAfterburner = createAfterburner();
+                rightAfterburner = createAfterburner();
+
+                aircraft.add(leftAfterburner);
+                aircraft.add(rightAfterburner);
+
+                // Initial nozzle positions in the model's local space.
+                leftAfterburner.position.set(
+                    -0.075,
+                    0.02,
+                    0.62
+                );
+
+                rightAfterburner.position.set(
+                    0.075,
+                    0.02,
+                    0.62
+                );
 
                 // -------------------------------------------------
                 // SHADOWS
@@ -1042,17 +1119,6 @@
 
                 aircraft.scale.setScalar(
                     scale
-                );
-
-
-                // -------------------------------------------------
-                // EXHAUST POSITION
-                // -------------------------------------------------
-
-                exhaustParticles.position.set(
-                    0,
-                    0,
-                    -8
                 );
 
 
@@ -1256,7 +1322,7 @@
         // ANIMATION
         // =====================================================
 
-        function animate() {
+        function animate(time = 0) {
 
             requestAnimationFrame(
                 animate
@@ -1316,6 +1382,13 @@
                     );
 
             }
+
+
+            // -------------------------------------------------
+            // AFTERBURNERS
+            // -------------------------------------------------
+
+            updateAfterburners(time);
 
 
             // -------------------------------------------------
