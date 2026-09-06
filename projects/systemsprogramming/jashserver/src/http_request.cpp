@@ -1,6 +1,7 @@
 #include "http_request.h"
 
 #include <sstream>
+#include <iterator>
 
 bool HTTPRequest::parse(const std::string& request)
 {
@@ -34,6 +35,11 @@ bool HTTPRequest::parse(const std::string& request)
 
         headers[key] = value;
     }
+
+    body.assign(
+        std::istreambuf_iterator<char>(stream),
+        std::istreambuf_iterator<char>()
+    );
 
     return true;
 }

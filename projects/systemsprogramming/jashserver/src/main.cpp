@@ -19,6 +19,18 @@
 #include "http_request.h"
 int visitor_count=0;
 pthread_mutex_t counter_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct IMUData
+{
+    float roll;
+    float pitch;
+    float yaw;
+};
+
+IMUData latest_imu{0.0f, 0.0f, 0.0f};
+
+pthread_mutex_t imu_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 class ThreadPool
 {
 private:
@@ -228,6 +240,24 @@ long long fibonacci(int n)
            fibonacci(n - 2);
 }
 
+std::string imuService()
+{
+    pthread_mutex_lock(&imu_mutex);
+
+    float roll = latest_imu.roll;
+    float pitch = latest_imu.pitch;
+    float yaw = latest_imu.yaw;
+
+    pthread_mutex_unlock(&imu_mutex);
+
+    return
+        "{"
+        "\"roll\":" + std::to_string(roll) +
+        ",\"pitch\":" + std::to_string(pitch) +
+        ",\"yaw\":" + std::to_string(yaw) +
+        "}";
+}
+
 std::string fibonacciService(
     std::unordered_map<std::string, std::string>& p)
 {
@@ -323,6 +353,7 @@ std::string getContentType(const std::string& path)
 }
 
 
+    
 void handleClient(
     int client_fd,
     sockaddr_in client_address)
@@ -336,25 +367,106 @@ void handleClient(
         << ntohs(client_address.sin_port)
         << std::endl;
 
-    char buffer[4096] = {0};
 
-    ssize_t bytes_received =
-        recv(
-            client_fd,
-            buffer,
-            sizeof(buffer) - 1,
-            0);
+    // --------------------------------------------------
+    // Receive HTTP headers first
+    // --------------------------------------------------
 
-    if (bytes_received <= 0)
+    std::string raw_request;
+
+    char buffer[4096];
+
+    const std::string header_end = "\r\n\r\n";
+
+    while (raw_request.find(header_end) == std::string::npos)
     {
-        close(client_fd);
+        ssize_t bytes_received =
+            recv(
+                client_fd,
+                buffer,
+                sizeof(buffer),
+                0
+            );
 
-        return;
+        if (bytes_received <= 0)
+        {
+            close(client_fd);
+            return;
+        }
+
+        raw_request.append(
+            buffer,
+            bytes_received
+        );
+
+        // Prevent an absurdly large header
+        if (raw_request.size() > 16384)
+        {
+            close(client_fd);
+            return;
+        }
     }
+
+
+    // --------------------------------------------------
+    // Parse headers so we can find Content-Length
+    // --------------------------------------------------
 
     HTTPRequest request;
 
-    request.parse(buffer);
+    request.parse(raw_request);
+
+    size_t body_start =
+        raw_request.find(header_end) + header_end.length();
+
+    size_t content_length = 0;
+
+    auto content_length_header =
+        request.headers.find("Content-Length");
+
+    if (content_length_header != request.headers.end())
+    {
+        content_length =
+            std::stoul(content_length_header->second);
+    }
+
+
+    // --------------------------------------------------
+    // Receive the rest of the body
+    // --------------------------------------------------
+
+    while (
+        raw_request.size() - body_start
+        < content_length
+    )
+    {
+        ssize_t bytes_received =
+            recv(
+                client_fd,
+                buffer,
+                sizeof(buffer),
+                0
+            );
+
+        if (bytes_received <= 0)
+        {
+            close(client_fd);
+            return;
+        }
+
+        raw_request.append(
+            buffer,
+            bytes_received
+        );
+    }
+
+
+    // --------------------------------------------------
+    // Now parse the COMPLETE HTTP request
+    // --------------------------------------------------
+
+    request.parse(raw_request);
+
 
     std::cout
         << request.method
@@ -362,77 +474,192 @@ void handleClient(
         << request.path
         << std::endl;
 
+
     std::string route =
         getRoute(request.path);
 
     auto params =
         parseQuery(request.path);
-    
+
+
     std::string body;
-std::string status = "HTTP/1.1 200 OK\r\n";
 
-if (route == "/profile")
-{
-    body = profileService(params);
-}
-else if (route == "/judge")
-{
-    body = judgeService(params);
-}
-else if (route == "/fibonacci")
-{
-    body = fibonacciService(params);
-}
-else
-{
-    std::string filename =
-        "public" + route;
+    std::string status =
+        "HTTP/1.1 200 OK\r\n";
 
-    body =
-        readFile(filename);
 
-    if (body.empty())
+    // --------------------------------------------------
+    // IMU POST
+    // --------------------------------------------------
+
+    if (
+        route == "/imu" &&
+        request.method == "POST"
+    )
     {
-        auto it =
-            routes.find(route);
+        std::cout
+            << "\n=== IMU DATA ===\n";
 
-        if (it != routes.end())
+        std::cout
+            << request.body
+            << std::endl;
+
+
+        float roll = 0.0f;
+        float pitch = 0.0f;
+        float yaw = 0.0f;
+
+
+        int result =
+            sscanf(
+                request.body.c_str(),
+                "{\"roll\":%f,\"pitch\":%f,\"yaw\":%f}",
+                &roll,
+                &pitch,
+                &yaw
+            );
+
+
+        if (result == 3)
         {
+            pthread_mutex_lock(&imu_mutex);
+
+            latest_imu.roll = roll;
+            latest_imu.pitch = pitch;
+            latest_imu.yaw = yaw;
+
+            pthread_mutex_unlock(&imu_mutex);
+
+
+            std::cout
+                << "Roll:  "
+                << roll
+                << std::endl;
+
+            std::cout
+                << "Pitch: "
+                << pitch
+                << std::endl;
+
+            std::cout
+                << "Yaw:   "
+                << yaw
+                << std::endl;
+
+
             body =
-                it->second();
+                "IMU data received";
         }
         else
         {
+            std::cout
+                << "Invalid IMU JSON"
+                << std::endl;
+
             status =
-                "HTTP/1.1 404 Not Found\r\n";
+                "HTTP/1.1 400 Bad Request\r\n";
 
             body =
-                "404 Not Found";
+                "Invalid IMU data";
         }
     }
-}
 
-std::string content_type =
-    getContentType(route);
 
-std::string response =
-    status +
-    "Content-Type: "
-    + content_type
-    + "\r\n"
-    + "Content-Length: "
-    + std::to_string(body.length())
-    + "\r\n\r\n"
-    + body;
+    // --------------------------------------------------
+    // IMU GET
+    // --------------------------------------------------
 
-        send(
+    else if (
+        route == "/imu" &&
+        request.method == "GET"
+    )
+    {
+        body =
+            imuService();
+    }
+
+
+    // --------------------------------------------------
+    // Existing routes
+    // --------------------------------------------------
+
+    else if (route == "/profile")
+    {
+        body =
+            profileService(params);
+    }
+
+    else if (route == "/judge")
+    {
+        body =
+            judgeService(params);
+    }
+
+    else if (route == "/fibonacci")
+    {
+        body =
+            fibonacciService(params);
+    }
+
+    else
+    {
+        std::string filename =
+            "public" + route;
+
+        body =
+            readFile(filename);
+
+
+        if (body.empty())
+        {
+            auto it =
+                routes.find(route);
+
+            if (it != routes.end())
+            {
+                body =
+                    it->second();
+            }
+            else
+            {
+                status =
+                    "HTTP/1.1 404 Not Found\r\n";
+
+                body =
+                    "404 Not Found";
+            }
+        }
+    }
+
+
+    // --------------------------------------------------
+    // HTTP response
+    // --------------------------------------------------
+
+    std::string content_type =
+        getContentType(route);
+
+
+    std::string response =
+        status +
+        "Content-Type: "
+        + content_type
+        + "\r\n"
+        + "Content-Length: "
+        + std::to_string(body.length())
+        + "\r\n\r\n"
+        + body;
+
+
+    send(
         client_fd,
         response.c_str(),
         response.length(),
-        0);
+        0
+    );
+
 
     close(client_fd);
-    
 }
 // ----------------------------------------------------------
 // Main server.

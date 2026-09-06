@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Live IMU</title>
+</head>
+
+<body>
+
+    <h1>Live IMU Data</h1>
+
+    <p>Roll: <span id="roll">0</span></p>
+    <p>Pitch: <span id="pitch">0</span></p>
+    <p>Yaw: <span id="yaw">0</span></p>
+
+    <script>
+
+        async function updateIMU() {
+            try {
+                const response =
+                    await fetch("/imu");
+
+                const data =
+                    await response.json();
+
+                document.getElementById("roll").textContent =
+                    data.roll.toFixed(2);
+
+                document.getElementById("pitch").textContent =
+                    data.pitch.toFixed(2);
+
+                document.getElementById("yaw").textContent =
+                    data.yaw.toFixed(2);
+            }
+            catch (error) {
+                console.log("IMU error:", error);
+            }
+        }
+
+        // Update 20 times per second
+        setInterval(updateIMU, 50);
+
+        // Get the first value immediately
+        updateIMU();
+
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>JashServer - Live Aircraft</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #050505;
+            font-family: Arial, sans-serif;
+        }
+
+        #info {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 10;
+
+            color: white;
+            background: rgba(0, 0, 0, 0.65);
+
+            padding: 15px;
+            border-radius: 8px;
+
+            min-width: 180px;
+        }
+
+        #info h2 {
+            margin: 0 0 10px 0;
+        }
+
+        #info p {
+            margin: 5px 0;
+        }
+
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="info">
+
+        <h2>JashServer IMU</h2>
+
+        <p>
+            Roll:
+            <span id="roll">0.00</span>°
+        </p>
+
+        <p>
+            Pitch:
+            <span id="pitch">0.00</span>°
+        </p>
+
+        <p>
+            Yaw:
+            <span id="yaw">0.00</span>°
+        </p>
+
+        <p id="status">
+            Connecting...
+        </p>
+
+    </div>
+
+
+    <script type="importmap">
+{
+    "imports": {
+        "three":
+            "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+
+        "three/addons/":
+            "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+}
+</script>
+
+
+    <script type="module">
+
+        import * as THREE from "three";
+
+        import { GLTFLoader }
+            from "three/addons/loaders/GLTFLoader.js";
+
+        import { OrbitControls }
+            from "three/addons/controls/OrbitControls.js";
+
+
+        // =====================================================
+        // SCENE
+        // =====================================================
+
+        const scene = new THREE.Scene();
+
+        scene.background =
+            new THREE.Color(0x050505);
+
+
+        // =====================================================
+        // CAMERA
+        // =====================================================
+
+        const camera =
+            new THREE.PerspectiveCamera(
+                60,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+
+        camera.position.set(
+            4,
+            3,
+            6
+        );
+
+
+        // =====================================================
+        // RENDERER
+        // =====================================================
+
+        const renderer =
+            new THREE.WebGLRenderer({
+                antialias: true
+            });
+
+        renderer.setPixelRatio(
+            window.devicePixelRatio
+        );
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+        renderer.shadowMap.enabled = true;
+
+        document.body.appendChild(
+            renderer.domElement
+        );
+
+
+        // =====================================================
+        // CAMERA CONTROLS
+        // =====================================================
+
+        const controls =
+            new OrbitControls(
+                camera,
+                renderer.domElement
+            );
+
+        controls.enableDamping = true;
+
+        controls.dampingFactor = 0.05;
+
+        controls.target.set(
+            0,
+            0,
+            0
+        );
+
+
+        // =====================================================
+        // LIGHTING
+        // =====================================================
+
+        const ambientLight =
+            new THREE.AmbientLight(
+                0xffffff,
+                2
+            );
+
+        scene.add(ambientLight);
+
+
+        const directionalLight =
+            new THREE.DirectionalLight(
+                0xffffff,
+                3
+            );
+
+        directionalLight.position.set(
+            5,
+            10,
+            5
+        );
+
+        directionalLight.castShadow = true;
+
+        scene.add(directionalLight);
+
+
+        const secondLight =
+            new THREE.DirectionalLight(
+                0xffffff,
+                1.5
+            );
+
+        secondLight.position.set(
+            -5,
+            3,
+            -5
+        );
+
+        scene.add(secondLight);
+
+
+        // =====================================================
+        // AIRCRAFT
+        // =====================================================
+
+        let aircraft = null;
+
+        const loader =
+            new GLTFLoader();
+
+
+        // CHANGE THIS IF YOUR FILE HAS A DIFFERENT NAME
+
+        const MODEL_PATH =
+            "/models/sr71_blackbird.glb";
+
+
+        loader.load(
+
+            MODEL_PATH,
+
+            function (gltf) {
+
+                aircraft = gltf.scene;
+
+                scene.add(aircraft);
+
+
+                // ---------------------------------------------
+                // Enable shadows
+                // ---------------------------------------------
+
+                aircraft.traverse(
+                    function (child) {
+
+                        if (child.isMesh) {
+
+                            child.castShadow = true;
+
+                            child.receiveShadow = true;
+
+                        }
+
+                    }
+                );
+
+
+                // ---------------------------------------------
+                // Automatically center the aircraft
+                // ---------------------------------------------
+
+                const box =
+                    new THREE.Box3()
+                        .setFromObject(aircraft);
+
+                const center =
+                    box.getCenter(
+                        new THREE.Vector3()
+                    );
+
+                aircraft.position.sub(center);
+
+
+                // ---------------------------------------------
+                // Automatically scale aircraft
+                // ---------------------------------------------
+
+                const size =
+                    box.getSize(
+                        new THREE.Vector3()
+                    );
+
+                const maxDimension =
+                    Math.max(
+                        size.x,
+                        size.y,
+                        size.z
+                    );
+
+                const desiredSize = 4;
+
+                const scale =
+                    desiredSize / maxDimension;
+
+                aircraft.scale.setScalar(scale);
+
+
+                console.log(
+                    "Aircraft loaded:",
+                    aircraft
+                );
+
+                document.getElementById(
+                    "status"
+                ).textContent =
+                    "Aircraft loaded";
+
+            },
+
+            function (progress) {
+
+                if (progress.total > 0) {
+
+                    const percent =
+                        (progress.loaded /
+                            progress.total) * 100;
+
+                    document.getElementById(
+                        "status"
+                    ).textContent =
+                        "Loading aircraft " +
+                        percent.toFixed(0) +
+                        "%";
+
+                }
+
+            },
+
+            function (error) {
+
+                console.error(
+                    "Aircraft loading error:",
+                    error
+                );
+
+                document.getElementById(
+                    "status"
+                ).textContent =
+                    "ERROR loading aircraft";
+
+            }
+
+        );
+
+
+        // =====================================================
+        // IMU VALUES
+        // =====================================================
+
+        let targetRoll = 0;
+        let targetPitch = 0;
+        let targetYaw = 0;
+
+
+        let currentRoll = 0;
+        let currentPitch = 0;
+        let currentYaw = 0;
+
+
+        // =====================================================
+        // GET IMU DATA FROM JASHSERVER
+        // =====================================================
+
+        async function updateIMU() {
+            try {
+
+                const response =
+                    await fetch(
+                        "/imu"
+                    );
+
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        "HTTP " +
+                        response.status
+                    );
+
+                }
+
+
+                const data =
+                    await response.json();
+
+
+                // ---------------------------------------------
+                // Get values from server
+                // ---------------------------------------------
+
+                targetRoll =
+                    data.roll;
+
+                targetPitch =
+                    data.pitch;
+
+                targetYaw =
+                    data.yaw;
+
+
+                // ---------------------------------------------
+                // Display values
+                // ---------------------------------------------
+
+                document.getElementById(
+                    "roll"
+                ).textContent =
+                    targetRoll.toFixed(2);
+
+
+                document.getElementById(
+                    "pitch"
+                ).textContent =
+                    targetPitch.toFixed(2);
+
+
+                document.getElementById(
+                    "yaw"
+                ).textContent =
+                    targetYaw.toFixed(2);
+
+
+                document.getElementById(
+                    "status"
+                ).textContent =
+                    "IMU connected";
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "IMU error:",
+                    error
+                );
+
+                document.getElementById(
+                    "status"
+                ).textContent =
+                    "IMU disconnected";
+
+            }
+        }
+
+
+        // =====================================================
+        // POLL SERVER
+        // =====================================================
+
+        // 50 ms = 20 times per second
+
+        setInterval(
+            updateIMU,
+            50
+        );
+
+        updateIMU();
+
+
+        // =====================================================
+        // ANIMATION
+        // =====================================================
+
+        function animate() {
+            requestAnimationFrame(
+                animate
+            );
+
+
+            // ---------------------------------------------
+            // Smooth the aircraft movement
+            // ---------------------------------------------
+
+            currentRoll +=
+                (targetRoll - currentRoll)
+                * 0.12;
+
+
+            currentPitch +=
+                (targetPitch - currentPitch)
+                * 0.12;
+
+
+            currentYaw +=
+                (targetYaw - currentYaw)
+                * 0.12;
+
+
+            // ---------------------------------------------
+            // Apply IMU orientation
+            // ---------------------------------------------
+
+            if (aircraft) {
+
+                aircraft.rotation.x =
+                    THREE.MathUtils.degToRad(
+                        currentPitch
+                    );
+
+
+                aircraft.rotation.y =
+                    THREE.MathUtils.degToRad(
+                        currentYaw
+                    );
+
+
+                aircraft.rotation.z =
+                    THREE.MathUtils.degToRad(
+                        currentRoll
+                    );
+
+            }
+
+
+            // ---------------------------------------------
+            // Update camera controls
+            // ---------------------------------------------
+
+            controls.update();
+
+
+            // ---------------------------------------------
+            // Render
+            // ---------------------------------------------
+
+            renderer.render(
+                scene,
+                camera
+            );
+        }
+
+
+        animate();
+
+
+        // =====================================================
+        // WINDOW RESIZE
+        // =====================================================
+
+        window.addEventListener(
+            "resize",
+            function () {
+
+                camera.aspect =
+                    window.innerWidth /
+                    window.innerHeight;
+
+                camera.updateProjectionMatrix();
+
+
+                renderer.setSize(
+                    window.innerWidth,
+                    window.innerHeight
+                );
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
